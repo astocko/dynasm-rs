@@ -20,18 +20,21 @@ use encoding::x64::generate_test;
 // vpermd
 //
 
+// instruction typos cvtpd2dS, palign
+
 
 #[test]
 fn addss() {
     let mut ops = dynasmrt::x64::Assembler::new();
 
     dynasm!(ops
-        ; bextr rax, rax, BYTE 0x10
+        ; bextr rax, rax, DWORD 0x10
         ; vucomiss xmm2,xmm3,DWORD [rax+0x10]
         ; adc rax, BYTE 0x10
+        ; fadd st0, st5
     );
 
-    // let buf = ops.finalize().unwrap();
+    let buf = ops.finalize().unwrap();
 
     // for b in buf.iter() {
     //     print!("\\x{:02X}", b);

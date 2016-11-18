@@ -14,6 +14,7 @@ path = "../plugin"
 path = "../runtime"
 
 [build-dependencies]
+lazy_static = "0.2"
 
 [build-dependencies.dynasm]
 path = "../plugin"

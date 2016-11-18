@@ -235,8 +235,8 @@ pub fn gen_imm(sz: ArgSize) -> (&'static str, ArgSize) {
         ArgSize::Word => "WORD 0x10",
         ArgSize::Dword => "DWORD 0x10",
         ArgSize::Qword => "QWORD 0x10",
-        ArgSize::Any => "0x10",
-    }
+        _ => "0x10",
+    };
     (imm, sz)
 }
 

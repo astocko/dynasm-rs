@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 use std::env;
 use std::error::Error;
 use std::fs::File;
@@ -102,9 +105,9 @@ mod testx64 {
         }
     }
 
-    #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
     pub struct OpSpec {
-        mnemonic: &'static str,
+        pub mnemonic: &'static str,
         args: Vec<Vec<u8>>,
     }
 
@@ -157,7 +160,7 @@ mod testx64 {
                             } else {
                                 argv.push(new_sz_args(args, b'w'));
                                 argv.push(new_sz_args(args, b'd'));
-                                argv.push(new_sz_args(args, b'q'));
+                                // argv.push(new_sz_args(args, b'q'));
                             }
                         } else if flags.contains(PREF_66) {
                             argv.push(new_sz_args(args, b'o'));
@@ -292,7 +295,15 @@ mod testx64 {
     }
 
     pub fn gen_imm(sz: ArgSize) -> (&'static str, ArgSize) {
-        ("0x10", sz)
+        let imm = match sz {
+            ArgSize::Auto => "0x10",
+            ArgSize::Byte => "BYTE 0x10",
+            ArgSize::Word => "WORD 0x10",
+            ArgSize::Dword => "DWORD 0x10",
+            ArgSize::Qword => "QWORD 0x10",
+            _ => "0x10",
+        };
+        (imm, sz)
     }
 
     pub fn gen_mem(sz: ArgSize) -> (&'static str, ArgSize) {
@@ -435,11 +446,33 @@ fn {test_name}() {
 
     let dynasm_str = "{mnemonic}";
     let nasm_str = ndisasm(buf.deref());
-    let nasm_str = nasm_str.replace("byte 0x10", "0x10");
     let nasm_str = nasm_str.replace("yword", "hword");
+    let nasm_str = nasm_str.replace(" +0x10", " 0x10");
     let dynasm_str = dynasm_str.replace("mmx", "mm");
+    let mut dynasm_str = dynasm_str.to_lowercase();
 
-    assert_eq!(dynasm_str.to_lowercase(), nasm_str);
+    if dynasm_str == "xchg eax,eax" {
+         dynasm_str = "nop".to_string();
+    }
+
+    if dynasm_str == nasm_str {
+        assert_eq!(dynasm_str, nasm_str);
+    } else if strip_size(&dynasm_str) == strip_size(&nasm_str) {
+        assert_eq!(strip_size(&dynasm_str), strip_size(&nasm_str), "{}", to_u8(buf.deref()));
+    } else {
+        let ds = strip_size(&conv_imm(&dynasm_str, buf.deref().len()));
+        let ns = strip_size(&nasm_str);
+        // jump or call dword FIXME(astocko): ugly hack
+        if ds.contains("st0") || ds.contains("st1") || ns.contains("st0") || ns.contains("st1") {
+            try_x87(ds.trim(), ns.trim(), &to_u8(buf.deref()));
+        } else {
+            assert_eq!(ds.trim(), ns.trim(), "{}", to_u8(buf.deref()));
+        }
+    }
+
+    // assert!(dynasm_str == nasm_str || strip_size(dynasm_str) == nasm_str);
+
+    //assert_eq!(dynasm_str.to_lowercase(), nasm_str, "{:?}", buf.deref());
 }
 "#;
 
@@ -455,11 +488,14 @@ fn {test_name}() {
 
             let test_name = format!("{}_{}", ins, x);
             x += 1;
+            let arg_string = generate_arg_str(&arg);
             let mnem = format!("{} {}", ins, generate_arg_str(&arg));
-            let mnem = mnem.trim();
+            // let mnem = mnem.trim().to_string();
+
+            // let mnem = mnem.replace("st0,", "");
 
             let mut test_str = test_tmpl.replace("{test_name}", test_name.as_str());
-            let test_str = test_str.replace("{mnemonic}", mnem);
+            let test_str = test_str.replace("{mnemonic}", mnem.as_str());
 
             f.write_all(test_str.as_bytes());
         }
@@ -467,14 +503,113 @@ fn {test_name}() {
 
 }
 
+use std::collections::HashMap;
+
+macro_rules! op_alias {
+    ($ ($x:tt = $y:tt),* ) => {
+        {
+            let mut tmp_map = HashMap::new();
+            $(
+                tmp_map.insert($x, $y);
+            )*
+            tmp_map
+        }
+    }
+}
+
+lazy_static! {
+    static ref OP_ALIAS: HashMap<&'static str, &'static str> = {
+        // let mut m = HashMap::new();
+
+        // m.insert("cmovae", "cmovnc");
+
+        let mut m = op_alias!(
+            "cmovae" = "cmovnc",
+            "cmovb" = "cmovc",
+            "cmovbe" = "cmovna",
+            "cmove" = "cmovz",
+            "cmovge" = "cmovnl",
+            "cmovle" = "cmovng",
+            "cmovnae" = "cmovc",
+            "cmovnb" = "cmovnc",
+            "cmovnbe" = "cmova",
+            "cmovnge" = "cmovl",
+            "cmovne" = "cmovnz",
+            "cmovnle" = "cmovg",
+            "cmovnp" = "cmovpo",
+            "cmovp" = "cmovpe",
+
+            "sal" = "shl",
+            "sete" = "setz",
+            "setae" = "setnc",
+            "setbe" = "setna",
+            "setge" = "setnl",
+            "setnae" = "setc",
+            "setle" = "setng",
+            "setnb" = "setnc",
+            "setnge" = "setl",
+            "setnp" = "setpo",
+            "setne" = "setnz",
+            "setp" = "setpe",
+
+            "jae" = "jnc",
+            "jb" = "jc",
+            "jbe" = "jna",
+            "je" = "jz",
+            "jge" = "jnl",
+            "jle" = "jng",
+            "jnae" = "jc",
+            "jnb" = "jnc",
+            "jnbe" = "ja",
+            "jne" = "jnz",
+            "jnle" = "jg",
+            "jnge" = "jl",
+            "jnp" = "jpo",
+            "jp" = "jpe",
+
+            "loopz" = "loope",
+            "loopnz" = "loopne",
+
+            "fwait" = "wait"
+        );
+
+        m
+    };
+}
+use std::collections::HashSet;
+
+
 
 fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("tests.rs");
     let mut f = File::create(&dest_path).unwrap();
-
     let op_specs = testx64::opspecs_from_opmap();
+
+    let mut processed = HashSet::new();
+
+
     for spec in op_specs {
-        testx64::generate_test(spec, &mut f);
+
+        match spec.mnemonic {
+            "monitorx" => continue,
+            "mwaitx" => continue,
+            _ => (),
+        }
+
+        let mut sp = spec.clone();
+
+        match OP_ALIAS.get(spec.mnemonic) {
+            Some(x) => sp.mnemonic = x,
+            None => (),
+        }
+
+        let mnem = sp.mnemonic;
+
+        if !processed.contains(sp.mnemonic) {
+            testx64::generate_test(sp, &mut f);
+        }
+
+        processed.insert(mnem);
     }
 }
