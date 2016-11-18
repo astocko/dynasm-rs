@@ -3,6 +3,8 @@ name = "testing"
 version = "0.0.1"
 authors = ["CensoredUsername <cens.username@gmail.com>"]
 
+build = "build.rs"
+
 [dependencies]
 
 [dependencies.dynasm]
@@ -10,3 +12,8 @@ path = "../plugin"
 
 [dependencies.dynasmrt]
 path = "../runtime"
+
+[build-dependencies]
+
+[build-dependencies.dynasm]
+path = "../plugin"

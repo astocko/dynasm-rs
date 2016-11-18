@@ -5,12 +5,18 @@
 extern crate dynasmrt;
 use dynasmrt::{DynasmApi, DynasmLabelApi};
 
+
+mod encoding;
+
+
 // aliases, and dynasm! in item position
 dynasm!(ops
     ; .alias test, rax
 );
 
-fn main() {
+
+#[test]
+fn prog_test() {
     let mut ops = dynasmrt::x64::Assembler::new();
     let d = 3;
     let c = 4;
